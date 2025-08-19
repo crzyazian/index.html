@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ultimate Frisbee Training Log</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        .scroll-container {
+            overflow-y: auto;
+        }
+        .message-box {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background-color: #4CAF50;
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+            opacity: 0;
+            transform: translateY(-20px);
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+        .message-box.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .loading-spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 4px solid white;
+            width: 24px;
+            height: 24px;
+            -webkit-animation: spin 1s linear infinite;
+            animation: spin 1s linear infinite;
+        }
+        @-webkit-keyframes spin {
+            0% { -webkit-transform: rotate(0deg); }
+            100% { -webkit-transform: rotate(360deg); }
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex min-h-screen">
+
+    <div id="app" class="flex flex-col md:flex-row w-full p-4 md:p-8 space-y-8 md:space-y-0 md:space-x-8">
+
+        <!-- Left Column: Day List -->
+        <div class="md:w-1/3 w-full flex-shrink-0">
+            <div class="bg-white rounded-xl shadow-lg p-6">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4">Current Week</h2>
+                <div id="day-list" class="space-y-2">
+                    <!-- Day list items will be rendered here by JavaScript -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Details/Edit View -->
+        <div class="md:w-2/3 w-full flex-grow">
+            <div id="detail-view-container" class="bg-white rounded-xl shadow-lg p-6 h-full flex flex-col">
+                <!-- Content will be rendered here by JavaScript -->
+                <div id="empty-state" class="flex-grow flex items-center justify-center text-gray-400">
+                    <p class="text-lg">Select a day to view or edit your workout.</p>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Message Box -->
+    <div id="message-box" class="message-box"></div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+
+            // --- Utility Functions ---
+            function showMessage(text, duration = 3000) {
+                const messageBox = document.getElementById('message-box');
+                messageBox.textContent = text;
+                messageBox.classList.add('show');
+                setTimeout(() => {
+                    messageBox.classList.remove('show');
+                }, duration);
+            }
+
+            // --- Data Models and Default Data ---
+            class Exercise {
+                constructor(name = '', sets = '', reps = '', notes = '', tempo = '', rest = '', weight = '', effort = '', howIFelt = '', videoLink = '') {
+                    this.name = name;
+                    this.sets = sets;
+                    this.reps = reps;
+                    this.notes = notes;
+                    this.tempo = tempo;
+                    this.rest = rest;
+                    this.weight = weight;
+                    this.effort = effort;
+                    this.howIFelt = howIFelt;
+                    this.videoLink = videoLink;
+                }
+            }
+
+            class DayWorkout {
+                constructor(day, title, exercises = []) {
+                    this.day = day;
+                    this.title = title;
+                    this.exercises = exercises.map(ex => new Exercise(ex.name, ex.sets, ex.reps, ex.notes, ex.tempo, ex.rest, ex.weight, ex.effort, ex.howIFelt, ex.videoLink));
+                }
+            }
+
+            const defaultWorkoutLog = [
+                new DayWorkout('Monday', 'S&C: Explosive Lower Body', [
+                    { name: "Power Cleans", sets: "5", reps: "3", notes: "Explosive, focus on form.", tempo: "X-X-1", rest: "2-3 min", videoLink: "https://www.youtube.com/watch?v=FqS-N3t72_0" },
+                    { name: "Box Jumps", sets: "4", reps: "5", notes: "Land softly, step down.", tempo: "Explosive", rest: "1 min", weight: "BW", videoLink: "https://www.youtube.com/watch?v=A8vE68gU8cE" },
+                    { name: "Deadlifts", sets: "4", reps: "5", notes: "Tempo: 3-1-X-1", tempo: "3-1-X-1", rest: "2-3 min", videoLink: "https://www.youtube.com/watch?v=op9kVnSso6Q" },
+                ]),
+                new DayWorkout('Tuesday', 'Speed & Agility', [
+                    { name: "Hill Sprints", sets: "6", reps: "50m", notes: "Focus on form and drive.", tempo: "N/A", rest: "90s", videoLink: "https://www.youtube.com/watch?v=x7-L-u232kQ" },
+                    { name: "Pro-Agility Shuttle", sets: "5", notes: "Fast and controlled.", tempo: "N/A", rest: "60s", videoLink: "https://www.youtube.com/watch?v=x7-L-u232kQ" },
+                ]),
+                new DayWorkout('Wednesday', 'Active Recovery', [
+                    { name: "Light Cardio", notes: "Jogging, swimming, or cycling.", videoLink: "https://www.youtube.com/watch?v=op9kVnSso6Q" },
+                ]),
+                new DayWorkout('Thursday', 'S&C: Upper Body & Rotational Power', [
+                    { name: "Push Press", sets: "5", reps: "5", notes: "Tempo: 3-1-X-1", tempo: "3-1-X-1", rest: "2 min", videoLink: "https://www.youtube.com/watch?v=2eX4-sUoWNA" },
+                    { name: "Plyo-Pushups", sets: "4", reps: "5", notes: "Explode up from the floor.", tempo: "Explosive", rest: "60s", weight: "BW", videoLink: "https://www.youtube.com/watch?v=J3mS_8B-iO0" },
+                ]),
+                new DayWorkout('Friday', 'Conditioning & Skills', [
+                    { name: "HIIT Sprints", sets: "6", reps: "200m", notes: "High intensity interval training.", videoLink: "https://www.youtube.com/watch?v=b4bYp_4k3wM" },
+                    { name: "Skills Drills", sets: "30 min", notes: "Throwing, catching, cutting drills.", videoLink: "https://www.youtube.com/watch?v=1F5d8mF2l-8" },
+                ]),
+                new DayWorkout('Saturday', 'Game Simulation', [
+                    { name: "Full Scrimmage", notes: "Put all your training to the test!", videoLink: "https://www.youtube.com/watch?v=dQw4w9WgXcQ" },
+                ]),
+                new DayWorkout('Sunday', 'Total Recovery', [
+                    { name: "Rest/Massage/PT", notes: "Crucial for muscle repair and growth.", videoLink: "https://www.youtube.com/watch?v=dQw4w9WgXcQ" },
+                ]),
+            ];
+
+            // --- State Management and UI Elements ---
+            let workoutLog = [];
+            let selectedDay = null;
+            let editedExercises = [];
+
+            const dayListContainer = document.getElementById('day-list');
+            const detailViewContainer = document.getElementById('detail-view-container');
+            const emptyState = document.getElementById('empty-state');
+
+            // --- Local Storage Functions ---
+            const saveWorkoutLog = () => {
+                localStorage.setItem('workoutLog', JSON.stringify(workoutLog));
+                showMessage('Workout log saved!');
+            };
+
+            const loadWorkoutLog = () => {
+                try {
+                    const savedData = localStorage.getItem('workoutLog');
+                    if (savedData) {
+                        const parsedData = JSON.parse(savedData);
+                        workoutLog = parsedData.map(dayData => new DayWorkout(dayData.day, dayData.title, dayData.exercises));
+                    } else {
+                        workoutLog = defaultWorkoutLog;
+                    }
+                } catch (e) {
+                    console.error("Failed to load from local storage, using default data.", e);
+                    workoutLog = defaultWorkoutLog;
+                }
+            };
+
+            // --- Rendering Functions ---
+            const renderDayList = () => {
+                dayListContainer.innerHTML = '';
+                workoutLog.forEach(dayWorkout => {
+                    const isSelected = selectedDay && selectedDay.day === dayWorkout.day;
+                    const dayCard = document.createElement('div');
+                    dayCard.className = `p-3 rounded-lg cursor-pointer transition-colors ${isSelected ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-50 hover:bg-blue-50'}`;
+                    dayCard.innerHTML = `
+                        <h3 class="font-semibold text-lg">${dayWorkout.day}</h3>
+                        <p class="text-sm ${isSelected ? 'text-blue-200' : 'text-gray-500'}">${dayWorkout.title}</p>
+                    `;
+                    dayCard.addEventListener('click', () => {
+                        selectedDay = dayWorkout;
+                        editedExercises = JSON.parse(JSON.stringify(dayWorkout.exercises)); // Deep copy for editing
+                        renderDetailView();
+                    });
+                    dayListContainer.appendChild(dayCard);
+                });
+            };
+
+            const renderDetailView = () => {
+                emptyState.classList.add('hidden');
+                detailViewContainer.innerHTML = '';
+                
+                if (!selectedDay) {
+                    emptyState.classList.remove('hidden');
+                    return;
+                }
+
+                // Header
+                const header = document.createElement('div');
+                header.className = "flex justify-between items-center pb-4 border-b border-gray-200 mb-4";
+                header.innerHTML = `
+                    <h2 class="text-2xl font-bold text-gray-800">${selectedDay.day}</h2>
+                    <div class="flex items-center space-x-2">
+                        <button id="save-button" class="flex items-center space-x-1 px-4 py-2 bg-blue-600 text-white rounded-lg shadow-md hover:bg-blue-700 transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                <path d="M5 4a2 2 0 012-2h6a2 2 0 012 2v14l-5-2.5L5 18V4z" />
+                            </svg>
+                            <span>Save</span>
+                        </button>
+                        <button id="close-button" class="p-2 text-gray-500 rounded-full hover:bg-gray-200 transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                `;
+                detailViewContainer.appendChild(header);
+
+                // Exercise List
+                const exerciseList = document.createElement('div');
+                exerciseList.id = 'exercise-list';
+                exerciseList.className = 'flex-grow scroll-container space-y-4';
+                detailViewContainer.appendChild(exerciseList);
+
+                renderExerciseInputs();
+
+                // Add Exercise Button
+                const addButton = document.createElement('button');
+                addButton.id = 'add-exercise-button';
+                addButton.className = 'flex items-center justify-center w-full mt-4 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg shadow-md hover:bg-gray-300 transition-colors';
+                addButton.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" />
+                    </svg>
+                    Add Exercise
+                `;
+                detailViewContainer.appendChild(addButton);
+
+                // Gemini Suggestions Section
+                const geminiSection = document.createElement('div');
+                geminiSection.className = 'mt-4 pt-4 border-t border-gray-200';
+                geminiSection.innerHTML = `
+                    <button id="gemini-suggest-button" class="flex items-center justify-center w-full px-4 py-2 bg-purple-600 text-white rounded-lg shadow-md hover:bg-purple-700 transition-colors">
+                        <span id="gemini-button-text">✨ Get Exercise Suggestions ✨</span>
+                    </button>
+                    <div id="suggestions-container" class="mt-4 space-y-2"></div>
+                `;
+                detailViewContainer.appendChild(geminiSection);
+
+                // Event Listeners for buttons
+                document.getElementById('save-button').addEventListener('click', handleSave);
+                document.getElementById('close-button').addEventListener('click', handleClose);
+                document.getElementById('add-exercise-button').addEventListener('click', handleAddExercise);
+                document.getElementById('gemini-suggest-button').addEventListener('click', getGeminiSuggestions);
+            };
+
+            const renderExerciseInputs = () => {
+                const exerciseList = document.getElementById('exercise-list');
+                if (!exerciseList) return;
+                exerciseList.innerHTML = '';
+
+                editedExercises.forEach((exercise, index) => {
+                    const exerciseCard = document.createElement('div');
+                    exerciseCard.className = "bg-gray-50 rounded-lg p-4 shadow-sm relative";
+                    exerciseCard.innerHTML = `
+                        <div class="flex items-center space-x-2 mb-2">
+                            <input type="text" class="exercise-input text-lg font-semibold text-gray-700 bg-transparent border-none focus:outline-none" data-index="${index}" data-field="name" value="${exercise.name || 'New Exercise'}">
+                            <button class="delete-exercise-button p-1 rounded-full text-red-500 hover:bg-red-100 transition-colors" data-index="${index}">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.728-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Sets</label>
+                                <input type="text" class="exercise-input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" data-index="${index}" data-field="sets" value="${exercise.sets}">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Reps</label>
+                                <input type="text" class="exercise-input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" data-index="${index}" data-field="reps" value="${exercise.reps}">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Notes</label>
+                                <input type="text" class="exercise-input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" data-index="${index}" data-field="notes" value="${exercise.notes}">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Tempo</label>
+                                <input type="text" class="exercise-input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" data-index="${index}" data-field="tempo" value="${exercise.tempo}">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Rest</label>
+                                <input type="text" class="exercise-input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" data-index="${index}" data-field="rest" value="${exercise.rest}">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Weight</label>
+                                <input type="text" class="exercise-input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" data-index="${index}" data-field="weight" value="${exercise.weight}">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Effort (1-10)</label>
+                                <input type="text" class="exercise-input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" data-index="${index}" data-field="effort" value="${exercise.effort}">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">How I Felt</label>
+                                <input type="text" class="exercise-input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" data-index="${index}" data-field="howIFelt" value="${exercise.howIFelt}">
+                            </div>
+                            <div class="sm:col-span-2 flex items-end space-x-2">
+                                <div class="flex-grow">
+                                    <label class="block text-sm font-medium text-gray-700">Video Link</label>
+                                    <input type="url" class="exercise-input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" data-index="${index}" data-field="videoLink" value="${exercise.videoLink}">
+                                </div>
+                                <button class="watch-video-button p-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors" data-index="${index}">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
+                                        <path d="M12 9a3 3 0 100 6 3 3 0 000-6z" />
+                                        <path fill-rule="evenodd" d="M1.5 12c0-1.036 1.127-2.071 2.67-3.083A9.776 9.776 0 0112 4.5c4.787 0 8.824 3.113 10.08 7.417-.18.613-.377 1.213-.578 1.802A7.5 7.5 0 0112 18.75a7.5 7.5 0 01-5.902-2.731c-.477-.557-.936-1.109-1.381-1.649L1.5 12zm21.75 0c0 .993-1.077 2.01-2.585 3.037a3.81 3.81 0 00-.73 1.059 9.9 9.9 0 01-1.396 1.705L12 21.75v-1.5a3.75 3.75 0 003.75-3.75V12h3.75z" clip-rule="evenodd" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                    exerciseList.appendChild(exerciseCard);
+
+                    // Add event listener for input changes
+                    exerciseCard.querySelectorAll('.exercise-input').forEach(input => {
+                        input.addEventListener('input', (e) => {
+                            const inputIndex = parseInt(e.target.dataset.index);
+                            const field = e.target.dataset.field;
+                            editedExercises[inputIndex][field] = e.target.value;
+                        });
+                    });
+                    
+                    // Add event listener for delete button
+                    exerciseCard.querySelector('.delete-exercise-button').addEventListener('click', (e) => {
+                        const deleteIndex = parseInt(e.currentTarget.dataset.index);
+                        editedExercises.splice(deleteIndex, 1);
+                        renderDetailView(); // Re-render to update UI
+                    });
+
+                    // Add event listener for watch video button
+                    exerciseCard.querySelector('.watch-video-button').addEventListener('click', (e) => {
+                        const videoLink = editedExercises[e.currentTarget.dataset.index].videoLink;
+                        if (videoLink) {
+                            window.open(videoLink, '_blank');
+                        } else {
+                            showMessage("No video link to watch.");
+                        }
+                    });
+                });
+            };
+
+            // --- Gemini API Functionality ---
+            const getGeminiSuggestions = async () => {
+                const button = document.getElementById('gemini-suggest-button');
+                const buttonText = document.getElementById('gemini-button-text');
+                const suggestionsContainer = document.getElementById('suggestions-container');
+                const originalButtonText = buttonText.textContent;
+
+                button.disabled = true;
+                buttonText.innerHTML = '<div class="loading-spinner"></div>';
+                suggestionsContainer.innerHTML = '';
+                
+                let chatHistory = [];
+                const currentExercises = editedExercises.map(ex => ex.name).join(', ');
+                const prompt = `You are a helpful fitness assistant for Ultimate Frisbee players. Provide 3-5 strength and conditioning exercise suggestions that are suitable for a workout titled "${selectedDay.title}". The current workout already includes these exercises: ${currentExercises}. Only provide the names of the exercises, formatted as a JSON array of strings, without any extra text or explanation. The exercises should complement the current workout and not repeat any of the existing ones.`;
+
+                chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+                const payload = {
+                    contents: chatHistory,
+                    generationConfig: {
+                        responseMimeType: "application/json",
+                        responseSchema: {
+                            type: "ARRAY",
+                            items: {
+                                type: "STRING"
+                            }
+                        }
+                    }
+                };
+
+                const apiKey = "";
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+                
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`API call failed with status: ${response.status}`);
+                    }
+
+                    const result = await response.json();
+                    
+                    if (result.candidates && result.candidates.length > 0 &&
+                        result.candidates[0].content && result.candidates[0].content.parts &&
+                        result.candidates[0].content.parts.length > 0) {
+                        
+                        const jsonString = result.candidates[0].content.parts[0].text;
+                        const suggestedExercises = JSON.parse(jsonString);
+
+                        if (suggestedExercises.length > 0) {
+                            suggestionsContainer.innerHTML = `
+                                <h3 class="text-lg font-bold text-gray-800">Suggested Exercises:</h3>
+                            `;
+                            suggestedExercises.forEach(exName => {
+                                const suggestionCard = document.createElement('div');
+                                suggestionCard.className = "flex justify-between items-center bg-gray-100 p-2 rounded-lg";
+                                suggestionCard.innerHTML = `
+                                    <span class="text-gray-700">${exName}</span>
+                                    <button class="add-suggested-exercise px-3 py-1 bg-green-500 text-white text-sm rounded-lg hover:bg-green-600 transition-colors" data-name="${exName}">Add</button>
+                                `;
+                                suggestionsContainer.appendChild(suggestionCard);
+
+                                suggestionCard.querySelector('.add-suggested-exercise').addEventListener('click', () => {
+                                    const newExercise = new Exercise(exName);
+                                    editedExercises.push(newExercise);
+                                    renderDetailView();
+                                    showMessage(`Added ${exName} to your workout.`);
+                                });
+                            }
+                        );
+                        } else {
+                            suggestionsContainer.innerHTML = `<p class="text-gray-500">No suggestions at the moment. Try a different workout!</p>`;
+                        }
+                    } else {
+                        throw new Error("Invalid response structure from API.");
+                    }
+                } catch (error) {
+                    console.error("Error fetching Gemini suggestions:", error);
+                    suggestionsContainer.innerHTML = `<p class="text-red-500">Sorry, there was an error getting suggestions. Please try again.</p>`;
+                } finally {
+                    button.disabled = false;
+                    buttonText.textContent = originalButtonText;
+                }
+            };
+
+            // --- Event Handlers ---
+            const handleSave = () => {
+                if (selectedDay) {
+                    const dayIndex = workoutLog.findIndex(day => day.day === selectedDay.day);
+                    if (dayIndex !== -1) {
+                        workoutLog[dayIndex].exercises = editedExercises;
+                        saveWorkoutLog();
+                        selectedDay = null; // Close edit view
+                        renderDayList(); // Re-render day list to remove selection highlight
+                        renderDetailView(); // Clear the detail view
+                    }
+                }
+            };
+
+            const handleClose = () => {
+                selectedDay = null;
+                renderDayList();
+                renderDetailView();
+            };
+
+            const handleAddExercise = () => {
+                editedExercises.push(new Exercise());
+                renderDetailView();
+            };
+
+            // --- Initial Load ---
+            loadWorkoutLog();
+            renderDayList();
+        });
+    </script>
+</body>
+</html>
